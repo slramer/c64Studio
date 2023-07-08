@@ -265,7 +265,11 @@ DelaySlowness
   
 ;start delay routine
 .delayRoutine  
-  ldy DelaySlowness
+  tya     ;save the X and Y registers in case used for indices
+  pha
+  txa
+  pha
+  ldy DelaySlowness   ;configurable delay
 .cycleDelayRoutine
   ldx #255
 .delayRoutineNested
@@ -273,6 +277,10 @@ DelaySlowness
   bne .delayRoutineNested
   dey
   bne .cycleDelayRoutine
+  pla     ;restore the X and Y registers to their values before the call to .delayRoutine
+  tax
+  pla
+  tay
   rts
 
 .displayText2
@@ -285,7 +293,7 @@ DelaySlowness
   cpx #40
   bne .clearLine
 ;now display it
-  ;jsr .fadeAndDelayOut
+  jsr .fadeAndDelayOut
   +textDisplayMacro $01, .displayText3, .nextTextString2
 
 .displayText3
@@ -322,77 +330,82 @@ DelaySlowness
     rts
 
 
-;;fade code could be good for something, but doesn't currently work quite right.  
-;BRIGHTNESS
-;  !byte 1, 15, 12, 11, 0, 0    ;ordered by dimmer greys
-;CURRENT_DIMMER_INDEX
-;  !byte 0
-;TEMP_TIMER_RUNS
-;  !byte 0
-;COLOR_MAP ;24 character colors mapped in normal memory
-;  !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-;
-;.fadeAndDelayOut
-;  jsr .copyColorMap
-;  ldx #00
-;.fADOFadeLoop
-;  stx CURRENT_DIMMER_INDEX
-;  jsr .fadeColorMap
-;  jsr .fADODelay
-;  jsr .fADODisplayColorMap
-;  ldx CURRENT_DIMMER_INDEX
-;  inx
-;  cpx #4  ;there are only 4 brightness increments
-;  bne .fADOFadeLoop
-;  rts
-;
-;.fADODisplayColorMap
-;  ldx #00
-;.fADONextColor
-;  lda COLOR_MAP, x
-;  sta NextColorMemory+NextTextOffset-1, x
-;  inx
-;  cpx #24
-;  bne .fADONextColor
-;  rts
-;    
-;.fADODelay
-;  lda .timerCounter     ;store the current timerCounter value from .delayRoutine so
-;  sta TEMP_TIMER_RUNS   ;we can call it without affecting its global timer count
-;  jsr .delayRoutine
-;  lda TEMP_TIMER_RUNS
-;  sta .timerCounter
-;  rts
-;  
-;.copyColorMap
-;  ldx #00
-;.cCMNextColor
-;  lda NextColorMemory+NextTextOffset-1, x
-;  sta COLOR_MAP, x
-;  inx
-;  cpx #24             ;no more then 24 characters in 2nd row
-;  bne .cCMNextColor
-;  rts
-;
-;.fadeColorMap
-;  ldx #00
-;.fCMNextColor
-;  lda COLOR_MAP, x
-;  beq .fCMNextX        ;leave this one alone. it's already 0
-;  ldy #00
-;.fCMBrightnessCheck
-;  lda BRIGHTNESS, y
-;  cmp COLOR_MAP, X
-;  bne .fCMONextY       ;increment Y and go to the next color brightness byte
-;  lda BRIGHTNESS+1, y  ;get the next dimmer color in BRIGHTNESS
-;  sta COLOR_MAP, X
-;  jmp .fCMNextX
-;.fCMONextY
-;  iny
-;  jmp .fCMBrightnessCheck
-;.fCMNextX
-;  inx
-;  cpx #24             ;no more then 24 characters in 2nd row
-;  bne .fCMNextColor
-;  rts
-;;end fade code
+;fade code could be good for something, but doesn't currently work quite right.  
+BRIGHTNESS
+  !byte 1, 15, 12, 11, 0, 0    ;ordered by dimmer greys
+CURRENT_DIMMER_INDEX
+  !byte 0
+TEMP_TIMER_RUNS
+  !byte 0
+COLOR_MAP ;24 character colors mapped in normal memory
+  !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+
+.fadeAndDelayOut
+  jsr .copyColorMap
+  ldx #00
+.fADOFadeLoop
+  stx CURRENT_DIMMER_INDEX
+  jsr .fadeColorMap
+  jsr .fADODelay
+  jsr .fADODisplayColorMap
+  ldx CURRENT_DIMMER_INDEX
+  inx
+  cpx #4  ;there are only 4 brightness increments
+  bne .fADOFadeLoop
+  rts
+
+.fADODisplayColorMap
+  ldx #00
+.fADONextColor
+  lda COLOR_MAP, x
+  sta NextColorMemory+NextTextOffset-1, x
+  inx
+  cpx #24
+  bne .fADONextColor
+  rts
+    
+.fADODelay
+  lda .timerCounter     ;store the current timerCounter value from .delayRoutine so
+  sta TEMP_TIMER_RUNS   ;we can call it without affecting its global timer count
+  lda #$40
+  sta DelaySlowness
+  jsr .delayRoutine
+  lda TEMP_TIMER_RUNS
+  sta .timerCounter
+  rts
+  
+.copyColorMap
+  ldx #00
+.cCMNextColor
+  lda NextColorMemory+NextTextOffset-1, x
+  sta COLOR_MAP, x
+  inx
+  cpx #24             ;no more then 24 characters in 2nd row
+  bne .cCMNextColor
+  rts
+
+.fadeColorMap
+  ldx #00
+.fCMNextColor
+  lda COLOR_MAP, x
+  beq .fCMNextX        ;leave this one alone. it's already 0
+  ldy #00
+.fCMBrightnessCheck
+  lda COLOR_MAP, x
+  and #$0f
+  sta COLOR_MAP, x
+  lda BRIGHTNESS, y
+  cmp COLOR_MAP, X
+  bne .fCMONextY       ;increment Y and go to the next color brightness byte
+  lda BRIGHTNESS+1, y  ;get the next dimmer color in BRIGHTNESS
+  sta COLOR_MAP, X
+  jmp .fCMNextX
+.fCMONextY
+  iny
+  jmp .fCMBrightnessCheck
+.fCMNextX
+  inx
+  cpx #24             ;no more then 24 characters in 2nd row
+  bne .fCMNextColor
+  rts
+;end fade code
